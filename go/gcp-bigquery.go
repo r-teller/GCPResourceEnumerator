@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -12,37 +13,8 @@ import (
 	assetpb "google.golang.org/genproto/googleapis/cloud/asset/v1"
 )
 
-// type DebugLevel int
-type DebugLevel int
-
-const (
-	OFF   DebugLevel = 0 // EnumIndex = 0
-	FATAL            = 1 // EnumIndex = 1 // Not Implemented Yet
-	ERROR            = 2 // EnumIndex = 2 // Not Implemented Yet
-	WARN             = 3 // EnumIndex = 3
-	INFO             = 4 // EnumIndex = 4 // Not Implemented Yet
-	DEBUG            = 5 // EnumIndex = 5 // Not Implemented Yet
-	TRACE            = 6 // EnumIndex = 6
-)
-
-func (d DebugLevel) String() string {
-	return [...]string{"OFF", "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"}[d]
-}
-
-func (d DebugLevel) EnumIndex() int {
-	return int(d)
-}
-
-// func (d DebugLevel) String() string {
-// 	return [...]string{"OFF", "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"}[d]
-// }
-
-// func (d DebugLevel) EnumIndex() int {
-// 	return int(d)
-// }
-
-var DebugLevelLevel = DebugLevel(ERROR)
 var BigqueryDebugLevel = DebugLevel(ERROR)
+var InferSchemaDebugLevel = DebugLevel(ERROR)
 
 func InferSchema(st interface{}) (bigquery.Schema, error) {
 	var fieldSchema []bigquery.FieldSchema
@@ -66,7 +38,7 @@ func InferSchema(st interface{}) (bigquery.Schema, error) {
 			field.Required = false
 			field.Repeated = false
 			fieldSchema = append(fieldSchema, field)
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 				fmt.Printf("TRACE: InferSchema:String %s \n", field)
 			}
 		case reflect.Bool:
@@ -76,7 +48,7 @@ func InferSchema(st interface{}) (bigquery.Schema, error) {
 			field.Required = false
 			field.Repeated = false
 			fieldSchema = append(fieldSchema, field)
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 				fmt.Printf("TRACE: InferSchema:Bool %s \n", field)
 			}
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -86,7 +58,7 @@ func InferSchema(st interface{}) (bigquery.Schema, error) {
 			field.Required = false
 			field.Repeated = false
 			fieldSchema = append(fieldSchema, field)
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 				fmt.Printf("TRACE: InferSchema:Int %s \n", field)
 			}
 		case reflect.Float32, reflect.Float64:
@@ -96,17 +68,18 @@ func InferSchema(st interface{}) (bigquery.Schema, error) {
 			field.Required = false
 			field.Repeated = false
 			fieldSchema = append(fieldSchema, field)
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 				fmt.Printf("TRACE: InferSchema:Float32 %s \n", field)
 			}
 		case reflect.Map:
 			// This Field is skipped because it is not supported by BQ
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(WARN).EnumIndex() {
+			// This could be implemented as two Key/Value String Fields
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(WARN).EnumIndex() {
 				fmt.Printf("WARNING: InferSchema %s is of type <%s> and is not currently supported. This item was passed from Parent: %s \n", name, kind, stTypeOf)
 			}
 		case reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			// This Field is skipped because it is not supported by BQ
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(WARN).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(WARN).EnumIndex() {
 				fmt.Printf("WARNING: InferSchema %s is of type <%s> and is not currently supported. This item was passed from Parent: %s \n", name, kind, stTypeOf)
 			}
 		case reflect.Ptr:
@@ -120,29 +93,30 @@ func InferSchema(st interface{}) (bigquery.Schema, error) {
 			ptrKind := stTypeOf.Field(i).Type.Elem().Kind()
 			switch ptrKind {
 			case reflect.Struct:
-				for _, nestedField := range InferFields(rvTypeOf) {
-					field.Schema = append(field.Schema, &nestedField)
+				nestedFields := InferFields(rvTypeOf)
+				for ii := range nestedFields {
+					field.Schema = append(field.Schema, &nestedFields[ii])
 				}
 			case reflect.Ptr:
 				fieldSchema = append(fieldSchema, InferField(name, rvTypeOf))
 			case reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				// This Field is skipped because it is not supported by BQ
-				if DebugLevelLevel.EnumIndex() >= DebugLevel(WARN).EnumIndex() {
+				if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(WARN).EnumIndex() {
 					fmt.Printf("WARNING: InferFields:PTR %s is of type <%s> and is not currently supported. This item was passed from Parent: %s \n", name, ptrKind, stTypeOf)
 				}
 			default:
-				if DebugLevelLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
+				if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
 					fmt.Printf("ERROR: InferSchema:PTR %s is of type <%s> and is not currently defined.\n", name, ptrKind)
 				}
 			}
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 				fmt.Printf("TRACE: InferSchema:PTR %s \n", field)
 			}
 			fieldSchema = append(fieldSchema, field)
 		case reflect.Slice:
 			fieldSchema = append(fieldSchema, InferFieldSchema(name, value))
 		default:
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
 				fmt.Printf("ERROR: InferSchema %s is of type <%s> and is not currently defined.\n", name, kind)
 			}
 		}
@@ -151,8 +125,9 @@ func InferSchema(st interface{}) (bigquery.Schema, error) {
 	for i := 0; i < len(fieldSchema); i++ {
 		schema = append(schema, &fieldSchema[i])
 	}
-	if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
-		fmt.Printf("DEBUG: InferSchema:fieldSchema %s \n\n", fieldSchema)
+	if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+		fieldSchemaJSON, _ := json.Marshal(fieldSchema)
+		fmt.Printf("DEBUG: InferSchema:fieldSchema %s \n\n", string(fieldSchemaJSON))
 
 		fmt.Printf("DEBUG: InferSchema:schema %s \n\n", schema)
 	}
@@ -169,7 +144,7 @@ func InferFieldSchema(fieldName string, rv reflect.Value) bigquery.FieldSchema {
 		field.Type = bigquery.IntegerFieldType
 		field.Required = false
 		field.Repeated = true
-		if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+		if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 			fmt.Printf("TRACE: InferFieldSchema:Int %s \n", field)
 		}
 		return field
@@ -179,7 +154,7 @@ func InferFieldSchema(fieldName string, rv reflect.Value) bigquery.FieldSchema {
 		field.Type = bigquery.StringFieldType
 		field.Required = false
 		field.Repeated = true
-		if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+		if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 			fmt.Printf("TRACE: InferFieldSchema:String %s \n", field)
 		}
 		return field
@@ -190,15 +165,16 @@ func InferFieldSchema(fieldName string, rv reflect.Value) bigquery.FieldSchema {
 		field.Required = false
 		field.Repeated = true
 
-		for _, nestedField := range InferFields(rvTypeOf) {
-			field.Schema = append(field.Schema, &nestedField)
+		nestedFields := InferFields(rvTypeOf)
+		for i := range nestedFields {
+			field.Schema = append(field.Schema, &nestedFields[i])
 		}
-		if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+		if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 			fmt.Printf("TRACE: InferFieldSchema:Ptr %s \n", field)
 		}
 		return field
 	default:
-		if DebugLevelLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
+		if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
 			fmt.Printf("ERROR: InferFieldSchema %s is of type <%s> and is not currently defined.\n", fieldName, kind)
 		}
 	}
@@ -216,7 +192,7 @@ func InferField(fieldName string, rt reflect.Type) bigquery.FieldSchema {
 		field.Type = bigquery.BooleanFieldType
 		field.Required = false
 		field.Repeated = false
-		if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+		if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 			fmt.Printf("TRACE: InferField:Bool %s \n", field)
 		}
 		return field
@@ -226,13 +202,13 @@ func InferField(fieldName string, rt reflect.Type) bigquery.FieldSchema {
 		field.Type = bigquery.StringFieldType
 		field.Required = false
 		field.Repeated = false
-		if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+		if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 			fmt.Printf("TRACE: InferField:String %s \n", field)
 		}
 		return field
 	default:
-		if DebugLevelLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
-			fmt.Printf("WARNING: InferField %s is of type <%s> and is not currently defined.\n", fieldName, kind)
+		if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
+			fmt.Printf("ERROR: InferField %s is of type <%s> and is not currently defined.\n", fieldName, kind)
 		}
 	}
 	return bigquery.FieldSchema{}
@@ -256,7 +232,7 @@ func InferFields(rt reflect.Type) []bigquery.FieldSchema {
 			field.Type = bigquery.StringFieldType
 			field.Required = false
 			field.Repeated = false
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 				fmt.Printf("TRACE: InferFields:String %s \n", field)
 			}
 			schema = append(schema, field)
@@ -266,8 +242,8 @@ func InferFields(rt reflect.Type) []bigquery.FieldSchema {
 			field.Type = bigquery.BooleanFieldType
 			field.Required = false
 			field.Repeated = false
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
-				fmt.Printf("TRACE: InferFields:Bool %s \n", field)
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+				fmt.Printf("TRACE: InferFields:Bool Parent: %s Field: %v \n", parent, field)
 			}
 			schema = append(schema, field)
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -276,8 +252,8 @@ func InferFields(rt reflect.Type) []bigquery.FieldSchema {
 			field.Type = bigquery.IntegerFieldType
 			field.Required = false
 			field.Repeated = false
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
-				fmt.Printf("TRACE: InferFields:Int %s \n", field)
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+				fmt.Printf("TRACE: InferFields:Int Parent: %s Field: %v \n", parent, field)
 			}
 			schema = append(schema, field)
 		case reflect.Float32, reflect.Float64:
@@ -286,18 +262,18 @@ func InferFields(rt reflect.Type) []bigquery.FieldSchema {
 			field.Type = bigquery.FloatFieldType
 			field.Required = false
 			field.Repeated = false
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 				fmt.Printf("TRACE: InferFields:Float32 %s \n", field)
 			}
 			schema = append(schema, field)
 		case reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			// This Field is skipped because it is not supported by BQ
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(WARN).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(WARN).EnumIndex() {
 				fmt.Printf("WARNING: InferFields %s is of type <%s> and is not currently supported. This item was passed from Parent: %s \n", name, kind, parent)
 			}
 		case reflect.Map:
 			// This Field is skipped because it is not supported by BQ
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(WARN).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(WARN).EnumIndex() {
 				fmt.Printf("WARNING: InferFields %s is of type <%s> and is not currently supported. This item was passed from Parent: %s \n", name, kind, parent)
 			}
 		case reflect.Slice:
@@ -311,15 +287,17 @@ func InferFields(rt reflect.Type) []bigquery.FieldSchema {
 				field.Type = bigquery.StringFieldType
 			case reflect.Ptr:
 				field.Type = bigquery.RecordFieldType
-				for _, nestedField := range InferFields(rt.Elem().Field(i).Type.Elem()) {
-					field.Schema = append(field.Schema, &nestedField)
+
+				nestedFields := InferFields(rt.Elem().Field(i).Type.Elem())
+				for ii := range nestedFields {
+					field.Schema = append(field.Schema, &nestedFields[ii])
 				}
 			default:
-				if DebugLevelLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
+				if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
 					fmt.Printf("ERROR: InferFields:Slice %s is of type <%s> and is not currently defined. This item was passed from Parent: %s \n", name, sliceType, parent)
 				}
 			}
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 				fmt.Printf("TRACE: InferFields:Slice %s \n", field)
 			}
 			schema = append(schema, field)
@@ -334,22 +312,23 @@ func InferFields(rt reflect.Type) []bigquery.FieldSchema {
 				field.Repeated = false
 				field.Type = bigquery.RecordFieldType
 
-				for _, nestedField := range InferFields(rtTypeOf) {
-					field.Schema = append(field.Schema, &nestedField)
+				nestedFields := InferFields(rtTypeOf)
+				for ii := range nestedFields {
+					field.Schema = append(field.Schema, &nestedFields[ii])
 				}
-				if DebugLevelLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+				if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
 					fmt.Printf("TRACE: InferFields:Ptr %s \n", field)
 				}
 				schema = append(schema, field)
 			case reflect.String, reflect.Bool:
 				schema = append(schema, InferField(name, rtTypeOf))
 			default:
-				if DebugLevelLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
+				if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
 					fmt.Printf("ERROR: InferFields:PTR %s is of type <%s> and is not currently defined. This item was passed from Parent: %s \n", name, ptrKind, parent)
 				}
 			}
 		default:
-			if DebugLevelLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
+			if InferSchemaDebugLevel.EnumIndex() >= DebugLevel(ERROR).EnumIndex() {
 				fmt.Printf("ERROR: InferFields %s is of type <%s> and is not currently defined. This item was passed from Parent: %s \n", name, kind, parent)
 			}
 		}
@@ -364,11 +343,18 @@ func bqDatasetExist(projectID string, datasetID string) (bool, error) {
 		return false, fmt.Errorf("bigquery.NewClient: %v", err)
 	}
 
-	md, err := client.Dataset(datasetID).Metadata(ctx)
+	dataset := client.Dataset(datasetID)
+	metadata, err := dataset.Metadata(ctx)
 	if err != nil {
+		if BigqueryDebugLevel.EnumIndex() >= DebugLevel(INFO).EnumIndex() {
+			fmt.Printf("INFO: bqDataset:EXIST == FALSE `datasetID: %s` \n", datasetID)
+		}
 		return false, nil
 	}
-	_ = md
+	_ = metadata
+	if BigqueryDebugLevel.EnumIndex() >= DebugLevel(INFO).EnumIndex() {
+		fmt.Printf("INFO: bqDataset:EXIST == TRUE `datasetID: %s` \n", datasetID)
+	}
 	return true, nil
 }
 
@@ -379,12 +365,15 @@ func bqDatasetCreate(projectID string, datasetID string, datasetRegion string) e
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
 
-	md := bigquery.DatasetMetadata{}
-	md.Description = "GCP Detailed Asset Inventory"
-	md.Location = datasetRegion
-	ds := client.Dataset(datasetID)
-	if err := ds.Create(ctx, &md); err != nil {
+	metadata := bigquery.DatasetMetadata{}
+
+	metadata.Location = datasetRegion
+	dataset := client.Dataset(datasetID)
+	if err := dataset.Create(ctx, &metadata); err != nil {
 		return fmt.Errorf("bigquery.dataset.Create: %v", err)
+	}
+	if BigqueryDebugLevel.EnumIndex() >= DebugLevel(INFO).EnumIndex() {
+		fmt.Printf("INFO: bqTable:CREATE `datasetID: %s` \n", datasetID)
 	}
 	return nil
 }
@@ -396,11 +385,19 @@ func bqTableExist(projectID string, datasetID string, tableID string) (bool, err
 		return false, fmt.Errorf("bigquery.NewClient: %v", err)
 	}
 
-	md, err := client.Dataset(datasetID).Table(tableID).Metadata(ctx)
+	table := client.Dataset(datasetID).Table(tableID)
+
+	metadata, err := table.Metadata(ctx)
 	if err != nil {
+		if BigqueryDebugLevel.EnumIndex() >= DebugLevel(INFO).EnumIndex() {
+			fmt.Printf("INFO: bqTable:EXIST == FALSE `datasetID: %s tableID: %s` \n", datasetID, tableID)
+		}
 		return false, nil
 	}
-	_ = md
+	_ = metadata
+	if BigqueryDebugLevel.EnumIndex() >= DebugLevel(INFO).EnumIndex() {
+		fmt.Printf("INFO: bqTable:EXIST == TRUE `datasetID: %s tableID: %s` \n", datasetID, tableID)
+	}
 	return true, nil
 }
 
@@ -420,6 +417,9 @@ func bqTableCreate(projectID string, datasetID string, tableID string, schema bi
 		return fmt.Errorf("bigquery.table.Create: %v", err)
 	}
 
+	if BigqueryDebugLevel.EnumIndex() >= DebugLevel(INFO).EnumIndex() {
+		fmt.Printf("INFO: bqTable:CREATE `datasetID: %s tableID: %s` \n", datasetID, tableID)
+	}
 	return nil
 }
 
@@ -435,6 +435,10 @@ func bqTableDelete(projectID string, datasetID string, tableID string) error {
 
 	if err := table.Delete(ctx); err != nil {
 		return fmt.Errorf("bigquery.table.Delete: %v", err)
+	}
+
+	if BigqueryDebugLevel.EnumIndex() >= DebugLevel(INFO).EnumIndex() {
+		fmt.Printf("INFO: bqTable:DELETE `datasetID: %s tableID: %s` \n", datasetID, tableID)
 	}
 
 	return nil
@@ -502,6 +506,9 @@ func bqDatasetAssetInventoryRefresh(projectID string, datasetID string, tableID 
 		// Insert assets in the specified table that was just created
 		if err := inserter.Put(ctx, assets); err != nil {
 			return fmt.Errorf("bigquery.table.Inserter: %v", err)
+		}
+		if BigqueryDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+			fmt.Printf("TRACE: bqDatasetAssetInventoryRefresh:INSERTER %+v \n", assets)
 		}
 		insertCounter++
 	}
@@ -650,57 +657,44 @@ func bqQueryAssetCompare(projectID string, datasetID string, assetInventoryTable
 	}
 	return assetList, nil
 }
+func bqExecutQuery(projectID string, queryString string) ([]bigquery.Value, error) {
+	ctx := context.Background()
+	client, err := bigquery.NewClient(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("bigquery.NewClient: %v", err)
+	}
 
-//// This is going away and merging into gcp-compute-XXXX.go
-// func bqAssetInsert(projectID string, datasetID string, tableID string, st interface{}) error {
-// 	ctx := context.Background()
-// 	client, err := bigquery.NewClient(ctx, projectID)
-// 	if err != nil {
-// 		return fmt.Errorf("bigquery.NewClient: %v", err)
-// 	}
-// 	defer client.Close()
+	defer client.Close()
 
-// 	js, _ := json.Marshal(st)
-// 	_ = js
-// 	jss := string(js)
-// 	// fmt.Println(jss)
-// 	ab := strings.NewReader(jss)
-// 	// fmt.Println(ab)
-// 	rs := bigquery.NewReaderSource(ab)
-// 	// rs.SourceFormat = bigquery.DataFormat(bigquery.JSON)
+	if BigqueryDebugLevel.EnumIndex() >= DebugLevel(DEBUG).EnumIndex() {
+		fmt.Printf("DEBUG: bqAssetTypesQueryDistinc:QUERY `%s` \n", queryString)
+	}
 
-// 	rs.SourceFormat = bigquery.JSON
-// 	s1, err := (&Address{}).GetSchema()
-// 	if err != nil {
-// 		fmt.Println(err)
-// 	}
-// 	rs.Schema = s1
-// 	rs.IgnoreUnknownValues = true
+	query := client.Query(queryString)
+	query.DisableQueryCache = true
 
-// 	table := client.Dataset(datasetID).Table(tableID)
-// 	loader := table.LoaderFrom(rs)
+	result, err := query.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-// 	loader.CreateDisposition = bigquery.CreateNever
-
-// 	job, err := loader.Run(ctx)
-// 	if err != nil {
-// 		fmt.Println(err)
-// 	}
-
-// 	status, err := job.Wait(ctx)
-// 	if err != nil {
-// 		fmt.Println(err)
-// 	}
-// 	if status.Err() != nil {
-// 		fmt.Println(status.Err())
-// 	}
-// 	os.Exit(999)
-// 	// if err := inserter.Put(ctx, st); err != nil {
-// 	// 	return fmt.Errorf("bigquery.Inserter.Put: %v", err)
-// 	// }
-
-// 	return nil
-// }
+	var rows []bigquery.Value
+	for {
+		var row []bigquery.Value
+		err := result.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("bigquery.query.Iterator: %v", err)
+		}
+		if BigqueryDebugLevel.EnumIndex() >= DebugLevel(TRACE).EnumIndex() {
+			fmt.Printf("TRACE: bqExecutQuery:ROW %+v \n", row)
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
 
 func bqAssetDelete(projectID string, datasetID string, tableID string, selfLink string) error {
 	ctx := context.Background()
